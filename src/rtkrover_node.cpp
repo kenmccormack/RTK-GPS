@@ -13,7 +13,11 @@
 #include <boost/thread.hpp>
 #include <boost/chrono.hpp>
 #include <iostream>
+#include <boost/foreach.hpp>
+#include <boost/tokenizer.hpp>
+#include <string>
 
+using namespace boost; 
 
 #define GPS_SERIAL
 
@@ -24,7 +28,43 @@ std::mutex radio_mutex;
 
 async_comm::Serial gps_serial("/dev/ttyUSB0", 57600);
 
+std::string msg_buffer; 
 
+
+void process_gps_msg(std::string msg)
+{
+  std::vector<std::string> msg_elements; 
+  //ROS_INFO("GPS message %s", msg.c_str());
+  char_separator<char> sep(",");
+  tokenizer< char_separator<char> > tokens(msg, sep);
+  BOOST_FOREACH (const std::string& t, tokens) 
+  {
+    msg_elements.push_back(t); 
+  }
+
+  ROS_INFO("Token count = %d", (int)msg_elements.size());
+
+  if(msg_elements.size() > 1)
+  {
+    ROS_INFO("%s",msg_elements[0].c_str());
+    if (msg_elements[0] == "$PSTI" && msg_elements[1]=="032")
+    {
+      if (msg_elements[4]=="A")
+      {
+          ROS_INFO("Valid Position --> East: %s North: %s Up: %s", 
+            msg_elements[6].c_str(),
+            msg_elements[7].c_str(),
+            msg_elements[8].c_str());
+      }
+      else
+      {
+        ROS_INFO("Invalid Position");
+      }
+    }
+  }
+
+
+}
 
 /**
  * @brief Callback function for the async_comm library
@@ -38,7 +78,14 @@ void gps_callback(const uint8_t* buf, size_t len)
 {
   for (size_t i = 0; i < len; i++)
   {
-    std::printf("%c", buf[i]);
+    //std::printf("%c", buf[i]);
+    if (buf[i] == '$')
+    {
+      process_gps_msg(msg_buffer);
+      msg_buffer.clear();
+    }
+    msg_buffer.push_back(buf[i]);
+
   }
 }
 
@@ -58,7 +105,6 @@ void radio_callback(const uint8_t* buf, size_t len)
 int main(int argc, char** argv)
 {
   ros::init(argc , argv, "rtkrover");
-
 
 
   // open serial port
