@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 import serial
+import rospy
 import datetime as dt
+from std_msgs.msg import Int32
+
+
+def publish_gpsnav_state(state):
+   pub = rospy.Publisher("nav_state", String, queue_size=10)
+   state_out = Int32(state)
+   pub.publish(state_out)
 
 
 class DecodeBinaryStream:
@@ -18,6 +26,9 @@ class DecodeBinaryStream:
 
 
     def process_byte(self, bytein):
+
+        message_complete = False
+        nav_state = 0
        
         if self.curstate == 'checksum':
             if ord(bytein) != self.do_checksum(self.msgbuf[0:self.msg_length]):
@@ -34,6 +45,12 @@ class DecodeBinaryStream:
                     print "msg type: " + hex(ord(self.msgbuf[0]))
                     print "nav state: " + hex(ord(self.msgbuf[2]))
                     print "IOD: "+hex(ord(self.msgbuf[1]))
+
+                     #publish the status of the gps lock
+                    nav_state = ord(self.msgbuf[2])
+                    message_complete = True 
+
+                   
 		    print dt.datetime.now().time()
 
         if self.curstate == 'length':
@@ -51,26 +68,40 @@ class DecodeBinaryStream:
 
         self.lastbytein = bytein 
 
-
-radioout = serial.Serial('/dev/ttyAMA0',19200)
-gpsin = serial.Serial('/dev/ttyUSB0',57600,timeout=1000.0)
-
-txcount =0
-dec = DecodeBinaryStream()
-
-with serial.Serial('/dev/ttyUSB0',57600,timeout=3.0) as serin:
-    while True :
-        bytein = gpsin.read(1)
-        #print "%s %s"%(dt.datetime.now(),format(ord(bytein),'02x'))
-        #serout.write(bytein)
-        radioout.write(bytein)
-
-        dec.process_byte(bytein)
-
-        txcount = (txcount + 1)
-        if txcount %255 == 0:
-		pass
-                #print txcount
+        return message_complete, nav_state
 
 
+
+def rtkbase():
+    rospy.init_node("rtkbase")
+    radioout = serial.Serial('/dev/ttyAMA0',19200)
+    gpsin = serial.Serial('/dev/ttyUSB0',57600,timeout=1000.0)
+
+    txcount =0
+    dec = DecodeBinaryStream()
+
+    with serial.Serial('/dev/ttyUSB0',57600,timeout=3.0) as serin:
+        while not rospy.is_shutdown() :
+            
+            #read a byte from the gps module
+            bytein = gpsin.read(1)
+
+            #send a byte out to the radio
+            radioout.write(bytein)
+
+            #locally decode the stream and extract the navigation state
+            [message_complete, nav_state] = dec.process_byte(bytein)
+            if message_complete == True:
+                publish_gpsnav_state(ord(self.msgbuf[2]))
+
+
+            txcount = (txcount + 1)
+            if txcount %255 == 0:
+            pass
+                    #print txcount
+
+
+
+if __name__ == '__main__':
+    rtkbase()
 
