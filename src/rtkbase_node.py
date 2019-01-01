@@ -6,7 +6,7 @@ from std_msgs.msg import Int32
 
 
 def publish_gpsnav_state(state):
-   pub = rospy.Publisher("nav_state", String, queue_size=10)
+   pub = rospy.Publisher("rtkbase_state", Int32, queue_size=10)
    state_out = Int32(state)
    pub.publish(state_out)
 
@@ -92,13 +92,12 @@ def rtkbase():
             #locally decode the stream and extract the navigation state
             [message_complete, nav_state] = dec.process_byte(bytein)
             if message_complete == True:
-                publish_gpsnav_state(ord(self.msgbuf[2]))
+                publish_gpsnav_state(nav_state)
 
 
             txcount = (txcount + 1)
             if txcount %255 == 0:
-            pass
-                    #print txcount
+            	pass
 
 
 
